@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>逃脫之境 | ESCAPE_REALM OS</title>
+    <!-- Sci-Fi & Chinese Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+TC:wght@300;500;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Cyberpunk Custom Style -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="hud-overlay">
+        <div class="scanline"></div>
+        <div class="vignette"></div>
+        <div class="hud-corner top-left"></div>
+        <div class="hud-corner top-right"></div>
+        <div class="hud-corner bottom-left"></div>
+        <div class="hud-corner bottom-right"></div>
+        <div class="hud-crosshair"></div>
+    </div>
+    <div id="map"></div>
+
+    <div id="app-container">
+        <header class="sys-header">
+            <div class="sys-title glitch" data-text="ESCAPE_REALM">ESCAPE_REALM</div>
+            <div class="sys-status">
+                <span class="blinking-dot"></span>
+                <span>SYSTEM.ONLINE</span>
+            </div>
+            <div class="sys-coords" id="hud-coords">COORD: 00.0000, 00.0000</div>
+        </header>
+
+        <aside class="cyber-panel">
+            <div class="panel-decorator"></div>
+            <div class="user-card module">
+                <div class="avatar-frame"><i class="fa-solid fa-user-ninja"></i></div>
+                <div class="user-info">
+                    <h3 id="username-display">GUEST_ENTITY</h3>
+                    <div class="streak-container">
+                        <div class="streak-header"><span>STREAK_METER</span><span id="streak-val">0/7</span></div>
+                        <div class="progress-bar-bg"><div id="progress-bar-fill" class="progress-bar-fill" style="width: 0%;"></div></div>
+                    </div>
+                </div>
+                <button id="login-btn" class="cyber-btn btn-sm">AUTH</button>
+                <button id="logout-btn" class="cyber-btn btn-sm btn-danger hidden">LOGOUT</button>
+            </div>
+
+            <!-- 新增：徽章查詢按鈕與歷史紀錄按鈕 -->
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <button id="badge-btn" class="cyber-btn btn-full hidden" style="margin-top:0; display:flex; justify-content:center; align-items:center; gap:8px;"><i class="fa-solid fa-award"></i> BADGES</button>
+                <button id="history-btn" class="cyber-btn btn-full hidden" style="margin-top:0; display:flex; justify-content:center; align-items:center; gap:8px;"><i class="fa-solid fa-calendar-days"></i> LOGS</button>
+            </div>
+            <button id="report-list-btn" class="cyber-btn btn-full hidden" style="margin-bottom: 25px; border-color: #c084fc; color: #c084fc; background: rgba(192, 132, 252, 0.05); display: flex; justify-content: center; align-items: center; gap: 10px; padding: 12px 15px; line-height: 1.2;"><i class="fa-solid fa-brain"></i> MEMORY_ANALYSIS</button>
+
+            <div class="module story-progress-module hidden">
+                <h3 class="module-title">[ STORY_PROGRESS ]</h3>
+                <div id="story-chapter-display" style="color: var(--text-muted); font-family: var(--font-ui); font-size: 0.75rem; letter-spacing: 1px; margin-bottom: 8px;">CHAPTER: --</div>
+                <div class="streak-container">
+                    <div class="streak-header"><span>MEMORY_FRAGMENTS</span><span id="story-fragment-count">0/0</span></div>
+                    <div class="progress-bar-bg"><div id="story-progress-fill" class="progress-bar-fill" style="width: 0%;"></div></div>
+                </div>
+                <div id="story-chapter-hint" style="color: var(--text-muted); font-family: var(--font-text); font-size: 0.8rem; margin-top: 10px; line-height: 1.5; padding: 8px; border-left: 2px solid var(--theme-dim); background: rgba(0,0,0,0.3);"></div>
+            </div>
+
+            <div class="module search-module">
+                <h3 class="module-title">[ MULTI_WAYPOINT_ROUTING ]</h3>
+                <div class="input-group">
+                    <input type="text" id="search-input" placeholder="ADD_WAYPOINT...">
+                    <button id="search-btn" class="cyber-btn btn-icon" title="新增中繼點"><i class="fa-solid fa-plus"></i></button>
+                </div>
+                <div id="waypoints-list" class="waypoints-container"></div>
+                <div id="routing-controls" class="routing-controls hidden">
+                    <div class="strategy-selector" style="margin-bottom: 15px;">
+                        <div class="cyber-radio active" data-strategy="optimize" onclick="setStrategy(this, 'optimize')"><i class="fa-solid fa-wand-magic-sparkles"></i> AI_OPTIMIZE</div>
+                        <div class="cyber-radio" data-strategy="sequential" onclick="setStrategy(this, 'sequential')"><i class="fa-solid fa-list-ol"></i> SEQUENTIAL</div>
+                    </div>
+                    <div class="route-actions">
+                        <button id="route-btn-drive" class="cyber-btn"><i class="fa-solid fa-truck-fast"></i> DRIVE</button>
+                        <button id="route-btn-walk" class="cyber-btn"><i class="fa-solid fa-shoe-prints"></i> WALK</button>
+                        <button id="clear-route" class="cyber-btn btn-danger btn-icon" title="CLEAR_ALL"><i class="fa-solid fa-trash-can"></i></button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="module mood-module">
+                <h3 class="module-title">[ EMOTION_UPLINK ]</h3>
+                <p class="mood-subtitle">SYNC_CURRENT_STATE</p>
+                <div class="input-group" style="margin-bottom: 10px;">
+                    <input type="text" id="mood-note" placeholder="輸入日誌資料 (必填)...">
+                </div>
+                <!-- Expanded 3x3 Emoji Grid -->
+                <div class="emoji-grid">
+                    <button class="cyber-mood-btn" data-mood="開心" data-emoji="😊"><span class="emoji">😊</span><span class="label">POSITIVE</span></button>
+                    <button class="cyber-mood-btn" data-mood="平靜" data-emoji="😌"><span class="emoji">😌</span><span class="label">STABLE</span></button>
+                    <button class="cyber-mood-btn" data-mood="亢奮" data-emoji="🤩"><span class="emoji">🤩</span><span class="label">OVERDRIVE</span></button>
+                    <button class="cyber-mood-btn" data-mood="疲憊" data-emoji="😩"><span class="emoji">😩</span><span class="label">DEPLETED</span></button>
+                    <button class="cyber-mood-btn" data-mood="焦慮" data-emoji="😰"><span class="emoji">😰</span><span class="label">CRITICAL</span></button>
+                    <button class="cyber-mood-btn" data-mood="憤怒" data-emoji="😡"><span class="emoji">😡</span><span class="label">HOSTILE</span></button>
+                    <button class="cyber-mood-btn" data-mood="悲傷" data-emoji="😭"><span class="emoji">😭</span><span class="label">SORROW</span></button>
+                    <button class="cyber-mood-btn" data-mood="迷惘" data-emoji="😵"><span class="emoji">😵</span><span class="label">LOST</span></button>
+                    <button class="cyber-mood-btn" data-mood="恐慌" data-emoji="😱"><span class="emoji">😱</span><span class="label">PANIC</span></button>
+                </div>
+            </div>
+
+            <div class="module mystery-module hidden">
+                <button id="mystery-btn" class="cyber-btn">
+                    MYSTERY
+                </button>
+            </div>
+            
+        </aside>
+
+        <div class="tactical-controls">
+            <button id="locate-me" class="cyber-fab" title="SYNC_LOCATION"><i class="fa-solid fa-crosshairs"></i></button>
+            <button id="toggle-parallel" class="cyber-fab parallel-trigger locked" title="需連續簽到 3 天解鎖"><i class="fa-solid fa-biohazard"></i><span class="fab-text">LOCKED</span><span class="fab-hint">3-DAY STREAK REQUIRED</span></button>
+        </div>
+    </div>
+
+    <div id="route-metrics" class="route-metrics fixed-route-metrics hidden">
+        <div class="metrics-title">ROUTE_DATA</div>
+        <div class="metrics-row">
+            <div class="metric-box"><i class="fa-solid fa-route"></i><div><div class="metric-label">DISTANCE</div><div class="metric-value" id="metric-dist">-- KM</div></div></div>
+            <div class="metric-box"><i class="fa-solid fa-stopwatch"></i><div><div class="metric-label">ETA</div><div class="metric-value" id="metric-time">-- MIN</div></div></div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <!-- 專屬的成就解鎖特效視窗 (取代原本醜醜的 alert) -->
+    <div id="unlock-modal" class="modal-overlay hidden" style="z-index: 10005;">
+        <div class="cyber-modal unlock-modal-content" style="text-align: center; border-color: #ffd700; box-shadow: 0 0 50px rgba(255, 215, 0, 0.4);">
+            <h1 class="glitch" style="color: #ffd700; font-size: 1.8rem;" data-text="ACHIEVEMENT UNLOCKED">ACHIEVEMENT UNLOCKED</h1>
+            <div style="font-size: 4rem; color: #ffd700; margin: 20px 0; text-shadow: 0 0 20px #ffd700;">
+                <i class="fa-solid fa-trophy"></i>
+            </div>
+            <h2 id="unlock-badge-name" style="color: #fff;">Badge Name</h2>
+            <p id="unlock-message" style="color: var(--text-muted);">Message...</p>
+            <button id="close-unlock" class="cyber-btn btn-full mt-3" style="border-color: #ffd700; color: #ffd700;">ACKNOWLEDGE</button>
+        </div>
+    </div>
+
+    <!-- 簽到中斷警示視窗 -->
+    <div id="streak-broken-modal" class="modal-overlay hidden" style="z-index: 10006;">
+        <div class="cyber-modal" style="text-align: center; border-color: #ff003c; box-shadow: 0 0 60px rgba(255, 0, 60, 0.5); width: 480px;">
+            <div style="font-size: 4rem; color: #ff003c; margin: 30px 0 10px; text-shadow: 0 0 30px #ff003c;">
+                <i class="fa-solid fa-chain-broken"></i>
+            </div>
+            <h1 class="glitch" style="color: #ff003c; font-size: 1.6rem; margin-bottom: 10px;" data-text="STREAK_BROKEN">STREAK_BROKEN</h1>
+            <p style="color: #fca5a5; font-family: var(--font-text); font-size: 1.1rem; margin: 10px 30px 30px; line-height: 1.6;">
+                簽到中斷，連續天數已歸零。<br>
+                重新開始累積吧。
+            </p>
+            <button id="close-streak-broken" class="cyber-btn btn-full" style="border-color: #ff003c; color: #ff003c; width: auto; margin: 0 30px 30px; padding: 12px 30px;">ACKNOWLEDGE</button>
+        </div>
+    </div>
+
+    <!-- 平行世界解鎖視窗 -->
+    <div id="parallel-unlock-modal" class="modal-overlay hidden" style="z-index: 10006;">
+        <div class="cyber-modal" style="text-align: center; border-color: #c084fc; box-shadow: 0 0 60px rgba(192, 132, 252, 0.5); width: 480px;">
+            <div style="font-size: 4rem; color: #c084fc; margin: 30px 0 10px; text-shadow: 0 0 30px #c084fc;">
+                <i class="fa-solid fa-biohazard"></i>
+            </div>
+            <h1 class="glitch" style="color: #c084fc; font-size: 1.2rem; margin-bottom: 10px; word-break: break-word;" data-text="PARALLEL_WORLD_UNLOCKED">PARALLEL_WORLD_UNLOCKED</h1>
+            <p style="color: #e9d5ff; font-family: var(--font-text); font-size: 1.1rem; margin: 10px 30px 30px; line-height: 1.6;">
+                平行世界已永久解鎖。<br>
+                連續三天情緒同步，現實縫隙已徹底打開。
+            </p>
+            <button id="close-parallel-unlock" class="cyber-btn btn-full" style="border-color: #c084fc; color: #c084fc; width: auto; margin: 0 30px 30px; padding: 12px 30px;">ENTER_ANOMALY_REALM</button>
+        </div>
+    </div>
+
+    <!-- 神經鏈結報告視窗 (優化美觀版) -->
+    <div id="report-modal" class="modal-overlay hidden" style="z-index: 10010; backdrop-filter: blur(10px);">
+        <div class="cyber-modal" style="width: 650px; background: rgba(5, 20, 30, 0.95); border: 1px solid #4ade80; box-shadow: 0 0 40px rgba(52, 211, 153, 0.2); border-radius: 12px;">
+            <div class="modal-header" style="border-bottom: 1px solid rgba(52, 211, 153, 0.3);">
+                <h2 style="color: #4ade80; font-weight: 400; letter-spacing: 2px; text-shadow: 0 0 10px rgba(52, 211, 153, 0.5);"><i class="fa-solid fa-leaf"></i> SOUL_ECHO_REPORT</h2>
+                <button id="close-report" class="cyber-btn btn-icon" style="color: #4ade80; border-color: transparent;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <p style="color: #6ee7b7; font-family: var(--font-ui); font-size: 0.85rem; letter-spacing: 1px; margin-bottom: 15px; opacity: 0.9;">[ RESONATING WITH INNER SANCTUARY... ]</p>
+                <div style="background: rgba(0,0,0,0.4); padding: 25px; border-radius: 8px; border-left: 3px solid #4ade80;">
+                    <pre id="report-content" style="white-space: pre-wrap; color: #f8fafc; font-size: 1rem; line-height: 1.8; font-family: var(--font-text); text-shadow: 0 0 5px rgba(255, 255, 255, 0.2); margin: 0;"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 歷史分析報告列表視窗 -->
+    <div id="report-list-modal" class="modal-overlay hidden" style="z-index: 10008;">
+        <div class="cyber-modal" style="width: 650px;">
+            <div class="modal-header">
+                <h2 class="glitch" data-text="MEMORY_ARCHIVE">MEMORY_ARCHIVE</h2>
+                <button id="close-report-list" class="cyber-btn btn-icon btn-danger"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body" id="report-list-container" style="max-height: 60vh; overflow-y: auto;">
+                <!-- Reports will go here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Auth Modal -->
+    <div id="auth-modal" class="modal-overlay hidden">
+        <div class="cyber-modal">
+            <div class="modal-header"><h2 class="glitch" data-text="AUTH_SYSTEM">AUTH_SYSTEM</h2><button id="close-modal" class="cyber-btn btn-icon btn-danger"><i class="fa-solid fa-xmark"></i></button></div>
+            <div class="modal-tabs"><button class="tab-btn active" data-tab="login">LOGIN</button><button class="tab-btn" data-tab="register">REGISTER</button></div>
+            <div class="modal-body">
+                <div class="input-group-col"><label>IDENTIFIER (Username)</label><input type="text" id="auth-username" placeholder="Enter Agent ID..."></div>
+                <div class="input-group-col"><label>SECURITY_KEY (Password)</label><input type="password" id="auth-password" placeholder="Enter Password..."></div>
+                <p id="auth-error-msg" class="error-msg"></p>
+                <button id="auth-submit" class="cyber-btn btn-full mt-3">EXECUTE_LOGIN</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="badge-modal" class="modal-overlay hidden">
+        <div class="cyber-modal">
+            <div class="modal-header"><h2 class="glitch" data-text="BADGE_COLLECTION">BADGE_COLLECTION</h2><button id="close-badge-modal" class="cyber-btn btn-icon btn-danger"><i class="fa-solid fa-xmark"></i></button></div>
+            <div class="modal-body" id="badge-list" style="max-height: 60vh; overflow-y: auto;"></div>
+        </div>
+    </div>
+
+    <!-- History Modal (Calendar View) -->
+    <div id="history-modal" class="modal-overlay hidden">
+        <div class="cyber-modal" style="width: 550px;">
+            <div class="modal-header"><h2 class="glitch" data-text="DATA_ARCHIVE">DATA_ARCHIVE</h2><button id="close-history-modal" class="cyber-btn btn-icon btn-danger"><i class="fa-solid fa-xmark"></i></button></div>
+            <div class="modal-body">
+                <div class="calendar-controls">
+                    <button id="cal-prev" class="cyber-btn btn-sm"><i class="fa-solid fa-chevron-left"></i></button>
+                    <span id="cal-month-year" style="font-family: var(--font-ui); color: var(--theme-color); font-size: 1.2rem; font-weight: bold;">YYYY-MM</span>
+                    <button id="cal-next" class="cyber-btn btn-sm"><i class="fa-solid fa-chevron-right"></i></button>
+                </div>
+                <div class="calendar-grid" id="calendar-grid"></div>
+                <div id="calendar-details" class="history-details hidden" style="margin-top: 20px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="mystery-modal" class="modal-overlay hidden">
+        <div class="cyber-modal">
+            <div class="modal-header">
+                <h2 class="glitch"
+                    data-text="MYSTERY_DATABASE">
+                    MYSTERY_DATABASE
+                </h2>
+                <button id="close-mystery-modal"
+                        class="cyber-btn btn-icon btn-danger">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div id="fragment-progress"
+                class="fragment-progress">
+                MEMORY_FRAGMENTS 0/0
+            </div>
+            <button
+                id="story-btn"
+                class="cyber-btn btn-sm">
+                RECOVERED_MEMORY
+            </button>            
+            <div class="modal-body"
+                id="mystery-list"
+                style="max-height: 60vh; overflow-y: auto;">
+                <div class="loading-state">
+                    SCANNING_FOR_ANOMALIES...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="story-archive-modal" class="modal-overlay hidden">
+        <div class="cyber-modal">
+            <div class="modal-header">
+                <h2 class="glitch" data-text="MEMORY_ARCHIVE">MEMORY_ARCHIVE</h2>
+                <button
+                    id="close-story-archive"
+                    class="cyber-btn btn-icon btn-danger">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="modal-body"
+                id="story-archive-list">
+            </div>
+        </div>
+    </div>
+    
+    <div id="final-anomaly-modal"
+        class="modal-overlay hidden">
+        <div class="cyber-modal">
+            <div class="modal-header">
+                <h2 class="glitch"
+                    data-text="FINAL_ANOMALY">
+                    FINAL_ANOMALY
+                </h2>
+                <button id="close-final-modal"
+                        class="cyber-btn btn-icon btn-danger">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="final-anomaly-content">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 異常掃描結果視窗 -->
+    <div id="scan-result-modal" class="modal-overlay hidden" style="z-index: 10007;">
+        <div class="cyber-modal" style="border-color: #ff003c; box-shadow: 0 0 40px rgba(255, 0, 60, 0.3); width: 500px;">
+            <div class="modal-header" style="border-bottom-color: rgba(255, 0, 60, 0.3);">
+                <h2 style="color: #ff003c; font-size: 1rem;" class="glitch" data-text="SIGNAL_SCAN_RESULT">SIGNAL_SCAN_RESULT</h2>
+                <button id="close-scan-result" class="cyber-btn btn-icon btn-danger"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <div style="font-size: 3rem; text-align: center; color: #ff003c; margin-bottom: 15px; text-shadow: 0 0 20px #ff003c;">◈</div>
+                <h3 id="scan-result-title" style="color: #fff; font-family: var(--font-ui); text-align: center; margin-bottom: 15px; font-size: 1.1rem;"></h3>
+                <div style="background: rgba(0,0,0,0.4); padding: 20px; border-radius: 6px; border-left: 3px solid #ff003c; margin-bottom: 15px;">
+                    <p id="scan-result-desc" style="color: #f8fafc; font-family: var(--font-text); font-size: 0.95rem; line-height: 1.7; margin: 0 0 15px 0;"></p>
+                    <div style="border-top: 1px dashed rgba(255, 0, 60, 0.3); padding-top: 12px;">
+                        <span style="color: #ff003c; font-family: var(--font-ui); font-size: 0.7rem; letter-spacing: 1px;">HINT</span>
+                        <p id="scan-result-hint" style="color: #fca5a5; font-family: var(--font-text); font-size: 0.9rem; margin: 5px 0 0 0;"></p>
+                    </div>
+                </div>
+                <button id="close-scan-result-btn" class="cyber-btn btn-full" style="border-color: #ff003c; color: #ff003c;">ACKNOWLEDGE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 全破慶祝視窗 -->
+    <div id="victory-modal" class="modal-overlay hidden" style="z-index: 10020; background: rgba(0,0,0,0.85);">
+        <div class="victory-container">
+            <div class="victory-particles" id="victory-particles"></div>
+            <div class="victory-content">
+                <div class="victory-badge">
+                    <i class="fa-solid fa-star-shooting"></i>
+                </div>
+                <h1 class="victory-title glitch" data-text="REALITY_ESCAPED">REALITY_ESCAPED</h1>
+                <div class="victory-subtitle">— 境界突破確認 —</div>
+                <div class="victory-divider"></div>
+                <p class="victory-message">
+                    你已成功穿越所有異常層，抵達現實的彼岸。<br>
+                    那些被遺忘的情緒，從未真正離開。<br>
+                    它們成為了你在另一個世界的印記。
+                </p>
+                <div class="victory-stats">
+                    <div class="victory-stat">
+                        <span class="victory-stat-icon"><i class="fa-solid fa-brain"></i></span>
+                        <span class="victory-stat-label">MEMORIES</span>
+                        <span class="victory-stat-value">9/9</span>
+                    </div>
+                    <div class="victory-stat">
+                        <span class="victory-stat-icon"><i class="fa-solid fa-layer-group"></i></span>
+                        <span class="victory-stat-label">CHAPTERS</span>
+                        <span class="victory-stat-value">3/3</span>
+                    </div>
+                </div>
+                <div class="victory-reward">
+                    <i class="fa-solid fa-award"></i> 獲得成就：<strong>現實脫出者</strong>
+                </div>
+                <button id="close-victory" class="cyber-btn btn-full" style="border-color: #ffd700; color: #ffd700; max-width: 300px; margin: 20px auto 0;">ESCAPE_COMPLETE</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
